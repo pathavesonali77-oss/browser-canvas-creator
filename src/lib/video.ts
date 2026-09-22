@@ -80,10 +80,11 @@ function gradeFor(_shot: Shot, _i: number): Grade {
 /**
  * Loads one panel picture for encoding.
  *
- * The picture is fetched STRAIGHT from the image host in this browser (CORS),
- * so video building never depends on the server proxy — the proxy rejects the
- * newer output hosts and that is what used to break the export. The proxy is
- * only tried as a last resort, after every direct attempt failed.
+ * The picture is fetched STRAIGHT from the image host in this browser, so video
+ * building no longer depends on the server relay that rejected the newer image
+ * addresses. If a host refuses direct cross-site reads, the relay is used as a
+ * quiet fallback for that host only, and the direct route is skipped for the
+ * rest of the run so nothing is slowed down.
  */
 async function bitmapFromResponse(res: Response): Promise<ImageBitmap> {
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -97,27 +98,51 @@ async function bitmapFromResponse(res: Response): Promise<ImageBitmap> {
   return bmp;
 }
 
+/** Hosts that proved they block direct cross-site reads in this session. */
+const directBlocked = new Set<string>();
+
+function hostOf(url: string): string {
+  try {
+    return new URL(url).host;
+  } catch {
+    return url;
+  }
+}
+
+async function fetchDirect(url: string): Promise<ImageBitmap> {
+  return bitmapFromResponse(
+    await fetch(url, { mode: "cors", credentials: "omit", cache: "force-cache" }),
+  );
+}
+
+async function fetchViaRelay(url: string): Promise<ImageBitmap> {
+  return bitmapFromResponse(await fetch(`/api/proxy-image?url=${encodeURIComponent(url)}`));
+}
+
 async function loadBitmap(url: string, attempts = 3): Promise<ImageBitmap> {
+  const host = hostOf(url);
   let last = "";
   for (let a = 0; a < attempts; a++) {
-    try {
-      return await bitmapFromResponse(
-        await fetch(url, { mode: "cors", credentials: "omit", cache: "force-cache" }),
-      );
-    } catch (e) {
-      last = e instanceof Error ? e.message : String(e);
-      await new Promise((r) => setTimeout(r, 400 * (a + 1)));
+    if (!directBlocked.has(host)) {
+      try {
+        return await fetchDirect(url);
+      } catch (e) {
+        last = e instanceof Error ? e.message : String(e);
+        // A cross-site read refusal surfaces as a TypeError with no status.
+        if (e instanceof TypeError) directBlocked.add(host);
+      }
     }
-  }
-  // Optional fallback only — a direct fetch is the supported path.
-  try {
-    return await bitmapFromResponse(
-      await fetch(`/api/proxy-image?url=${encodeURIComponent(url)}`),
-    );
-  } catch (e) {
-    last = e instanceof Error ? e.message : String(e);
+    if (directBlocked.has(host)) {
+      try {
+        return await fetchViaRelay(url);
+      } catch (e) {
+        last = e instanceof Error ? e.message : String(e);
+      }
+    }
+    await new Promise((r) => setTimeout(r, 400 * (a + 1)));
   }
   throw new Error(`Could not load panel image: ${last}`);
+
 }
 
 
