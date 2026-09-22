@@ -8,7 +8,7 @@ export const Route = createFileRoute("/api/proxy-image")({
         // Only the image provider's own output hosts may be proxied.
         if (
           !url ||
-          !/^https:\/\/[a-z0-9.-]*(agnes-ai\.com|storage\.googleapis\.com|r2\.dev)\//i.test(url)
+          !/^https:\/\/[a-z0-9.-]*(agnes-ai\.com|agnes-ai\.space|storage\.googleapis\.com|r2\.dev)\//i.test(url)
         ) {
           return new Response("Bad url", { status: 400 });
         }
