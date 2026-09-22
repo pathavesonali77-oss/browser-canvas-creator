@@ -77,27 +77,49 @@ function gradeFor(_shot: Shot, _i: number): Grade {
 /* Image loading                                                       */
 /* ------------------------------------------------------------------ */
 
+/**
+ * Loads one panel picture for encoding.
+ *
+ * The picture is fetched STRAIGHT from the image host in this browser (CORS),
+ * so video building never depends on the server proxy — the proxy rejects the
+ * newer output hosts and that is what used to break the export. The proxy is
+ * only tried as a last resort, after every direct attempt failed.
+ */
+async function bitmapFromResponse(res: Response): Promise<ImageBitmap> {
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const blob = await res.blob();
+  if (blob.size < 4000) throw new Error("blank panel file");
+  const bmp = await createImageBitmap(blob);
+  if (isBlankBitmap(bmp)) {
+    bmp.close();
+    throw new Error("blank panel image");
+  }
+  return bmp;
+}
+
 async function loadBitmap(url: string, attempts = 3): Promise<ImageBitmap> {
   let last = "";
   for (let a = 0; a < attempts; a++) {
     try {
-      const res = await fetch(`/api/proxy-image?url=${encodeURIComponent(url)}`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const blob = await res.blob();
-      if (blob.size < 4000) throw new Error("blank panel file");
-      const bmp = await createImageBitmap(blob);
-      if (isBlankBitmap(bmp)) {
-        bmp.close();
-        throw new Error("blank panel image");
-      }
-      return bmp;
+      return await bitmapFromResponse(
+        await fetch(url, { mode: "cors", credentials: "omit", cache: "force-cache" }),
+      );
     } catch (e) {
       last = e instanceof Error ? e.message : String(e);
       await new Promise((r) => setTimeout(r, 400 * (a + 1)));
     }
   }
+  // Optional fallback only — a direct fetch is the supported path.
+  try {
+    return await bitmapFromResponse(
+      await fetch(`/api/proxy-image?url=${encodeURIComponent(url)}`),
+    );
+  } catch (e) {
+    last = e instanceof Error ? e.message : String(e);
+  }
   throw new Error(`Could not load panel image: ${last}`);
 }
+
 
 /**
  * Blank-frame detector.
