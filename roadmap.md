@@ -11,3 +11,6 @@
 - [x] Replace repetitive box-panel prompts with mixed cinematic framing compositions
 - [x] Preserve the original direct-from-browser Agnes image generation path unchanged
 - [x] Verify the panel-layout-only change and responsive preview
+- [x] Import the public GitHub project into this workspace
+- [x] Build video from panel pictures downloaded in the browser, with the relay only as a fallback
+- [x] Accept the newer picture host in the relay allow-list
