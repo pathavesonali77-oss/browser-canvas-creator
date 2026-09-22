@@ -98,8 +98,34 @@ async function bitmapFromResponse(res: Response): Promise<ImageBitmap> {
   return bmp;
 }
 
-/** Hosts that proved they block direct cross-site reads in this session. */
-const directBlocked = new Set<string>();
+/**
+ * Hosts that proved they block direct cross-site reads.
+ *
+ * Remembered in this browser so the very first failed attempt is the only one
+ * the user ever sees: later runs go straight to the relay for that host.
+ */
+const BLOCKED_KEY = "vfa:direct-blocked-hosts";
+
+function loadBlocked(): Set<string> {
+  try {
+    const raw = localStorage.getItem(BLOCKED_KEY);
+    return new Set<string>(raw ? (JSON.parse(raw) as string[]) : []);
+  } catch {
+    return new Set<string>();
+  }
+}
+
+const directBlocked = typeof localStorage === "undefined" ? new Set<string>() : loadBlocked();
+
+function markBlocked(host: string) {
+  directBlocked.add(host);
+  try {
+    localStorage.setItem(BLOCKED_KEY, JSON.stringify([...directBlocked]));
+  } catch {
+    /* storage full or disabled — in-memory is enough for this session */
+  }
+}
+
 
 function hostOf(url: string): string {
   try {
