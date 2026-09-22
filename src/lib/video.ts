@@ -155,7 +155,7 @@ async function loadBitmap(url: string, attempts = 3): Promise<ImageBitmap> {
       } catch (e) {
         last = e instanceof Error ? e.message : String(e);
         // A cross-site read refusal surfaces as a TypeError with no status.
-        if (e instanceof TypeError) directBlocked.add(host);
+        if (e instanceof TypeError) markBlocked(host);
       }
     }
     if (directBlocked.has(host)) {
